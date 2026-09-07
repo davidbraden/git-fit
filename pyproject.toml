@@ -1,0 +1,42 @@
+[project]
+name = "git-fit"
+version = "0.1.0"
+description = "A small personal Garmin Connect activity archiver"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "garmin-fit-sdk>=21.178.0",
+  "garminconnect>=0.3.11",
+]
+
+[project.scripts]
+git-fit = "git_fit.cli:main"
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[dependency-groups]
+dev = [
+  "mypy>=1.14",
+  "pytest>=8.3",
+  "ruff>=0.9",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["git_fit"]
