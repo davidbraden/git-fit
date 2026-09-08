@@ -56,6 +56,36 @@ and explicitly marked as non-FIT. A failed item is retried by the next command.
 The archive directory and `.git-fit/` are ignored by Git. Back up
 `garmin-data/`; do not share the token directory.
 
+## Daily GitHub Actions sync
+
+The included GitHub Actions workflow can archive the account daily at 06:00 UTC
+and also supports manual runs from the Actions tab. It writes activity files and
+`manifest.json` directly to the private
+[`davidbraden/git-fit-data`](https://github.com/davidbraden/git-fit-data)
+repository. It does not commit Garmin credentials, tokens, or archive data to
+this public repository.
+
+Before enabling the workflow, create the private `git-fit-data` repository and
+create a dedicated deploy key for it:
+
+```sh
+ssh-keygen -t ed25519 -C git-fit-data-actions -f git-fit-data-actions
+```
+
+Add `git-fit-data-actions.pub` to the private repository under **Settings →
+Deploy keys**, with **Allow write access** enabled. Then add these Actions
+secrets to this public repository under **Settings → Secrets and variables →
+Actions**:
+
+- `DATA_REPO_DEPLOY_KEY`: the complete contents of `git-fit-data-actions`
+- `GARMIN_EMAIL`: the Garmin account email address
+- `GARMIN_PASSWORD`: the Garmin account password
+
+The data repository may be empty: the first successful sync creates its `main`
+branch and initial archive commit. The action logs in with the email and
+password on every run; its saved Garmin token is temporary and discarded when
+the runner exits.
+
 ## Development
 
 ```sh
@@ -63,4 +93,3 @@ uv run pytest
 uv run ruff check .
 uv run mypy src
 ```
-

@@ -44,7 +44,7 @@ class GarminGateway:
                     "Saved Garmin tokens could not be used "
                     f"({error}); logging in again."
                 )
-        return cls(authenticate(getpass.getpass("Garmin password: ")))
+        return cls(authenticate(_password_for_login()))
 
     def list_activities(self) -> list[dict[str, Any]]:
         """Return every activity from Garmin's paginated endpoint."""
@@ -80,3 +80,8 @@ def secure_token_store(token_file: Path) -> None:
     os.chmod(token_file.parent, 0o700)
     if token_file.exists():
         os.chmod(token_file, 0o600)
+
+
+def _password_for_login() -> str:
+    """Return a configured password without echoing it to the terminal."""
+    return os.environ.get("GARMIN_PASSWORD") or getpass.getpass("Garmin password: ")

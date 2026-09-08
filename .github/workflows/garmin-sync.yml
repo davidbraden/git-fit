@@ -1,0 +1,77 @@
+name: Garmin sync
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: garmin-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out archiver
+        uses: actions/checkout@v6
+
+      - name: Initialize temporary paths
+        run: |
+          echo "DATA_REPO_DIR=$RUNNER_TEMP/git-fit-data" >> "$GITHUB_ENV"
+          echo "GARMIN_TOKEN_FILE=$RUNNER_TEMP/git-fit-auth/garmin_tokens.json" >> "$GITHUB_ENV"
+          echo "SSH_DIRECTORY=$RUNNER_TEMP/git-fit-ssh" >> "$GITHUB_ENV"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install archiver dependencies
+        run: uv sync --frozen --no-dev
+
+      - name: Configure private data repository access
+        env:
+          DATA_REPO_DEPLOY_KEY: ${{ secrets.DATA_REPO_DEPLOY_KEY }}
+        run: |
+          umask 077
+          mkdir -p "$SSH_DIRECTORY"
+          printf '%s\n' "$DATA_REPO_DEPLOY_KEY" > "$SSH_DIRECTORY/id_ed25519"
+          ssh-keyscan -t ed25519 github.com > "$SSH_DIRECTORY/known_hosts"
+
+      - name: Clone private data repository
+        run: |
+          export GIT_SSH_COMMAND="ssh -i $SSH_DIRECTORY/id_ed25519 -o IdentitiesOnly=yes -o UserKnownHostsFile=$SSH_DIRECTORY/known_hosts -o StrictHostKeyChecking=yes"
+          git clone git@github.com:davidbraden/git-fit-data.git "$DATA_REPO_DIR"
+
+      - name: Download new Garmin activities
+        env:
+          GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}
+          GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
+        run: |
+          uv run --no-sync git-fit sync \
+            --data-dir "$DATA_REPO_DIR" \
+            --token-file "$GARMIN_TOKEN_FILE"
+
+      - name: Commit archive updates
+        run: |
+          export GIT_SSH_COMMAND="ssh -i $SSH_DIRECTORY/id_ed25519 -o IdentitiesOnly=yes -o UserKnownHostsFile=$SSH_DIRECTORY/known_hosts -o StrictHostKeyChecking=yes"
+          if ! git -C "$DATA_REPO_DIR" rev-parse --verify HEAD >/dev/null 2>&1; then
+            git -C "$DATA_REPO_DIR" switch --orphan main
+          fi
+
+          if test -z "$(git -C "$DATA_REPO_DIR" status --porcelain)"; then
+            exit 0
+          fi
+
+          git -C "$DATA_REPO_DIR" config user.name "github-actions[bot]"
+          git -C "$DATA_REPO_DIR" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$DATA_REPO_DIR" add --all
+          git -C "$DATA_REPO_DIR" commit -m "Sync Garmin activities"
+          git -C "$DATA_REPO_DIR" push origin HEAD:main
+
+      - name: Remove temporary credentials
+        if: always()
+        run: rm -rf "$SSH_DIRECTORY" "${GARMIN_TOKEN_FILE%/*}"
